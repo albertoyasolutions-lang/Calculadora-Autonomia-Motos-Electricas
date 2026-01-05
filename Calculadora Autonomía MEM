@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Calculadora Rutas Moto EV</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+    <style>
+        /* RESET Y ESTRUCTURA */
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+        :root { --primary: #2563eb; --danger: #dc2626; --bg: #f1f5f9; --card: #ffffff; --text: #0f172a; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg); color: var(--text); display: flex; flex-direction: column; }
+        
+        .main-layout { display: flex; flex-direction: column; height: 100%; width: 100%; }
+        
+        /* MAPA */
+        #map { flex: 1; min-height: 45vh; width: 100%; background-color: #e2e8f0; z-index: 1; }
+        
+        /* Ajuste para que el buscador se vea bien */
+        .leaflet-control-geocoder { z-index: 1000; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+
+        /* PANEL LATERAL */
+        .controls-container { 
+            flex: 1; 
+            padding: 20px; 
+            overflow-y: auto; 
+            background: var(--card); 
+            box-shadow: -2px 0 15px rgba(0,0,0,0.1); 
+            z-index: 2;
+            border-top: 4px solid var(--primary);
+        }
+
+        /* TIPOGRAFÍA Y FORMULARIOS */
+        h2 { margin: 0 0 20px 0; font-size: 1.4rem; color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
+        h3 { margin: 15px 0 10px 0; font-size: 1rem; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+        
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .input-group { margin-bottom: 10px; }
+        
+        label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; color: #64748b; }
+        input, select { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem; background: #fff; transition: 0.2s; box-sizing: border-box; }
+        input:focus, select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+        
+        /* ESTADO BAR */
+        .status-bar { background: #1e293b; color: white; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; margin-bottom: 20px; text-align: center; font-size: 0.9rem; }
+        .status-item span { display: block; font-size: 1.1rem; font-weight: bold; color: #38bdf8; margin-top: 2px; }
+
+        /* BOTONES */
+        button.action-btn { width: 100%; padding: 14px; background-color: var(--primary); color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 15px; box-shadow: 0 4px 6px -1px rgba(37,99,235,0.4); transition: 0.2s; }
+        button.action-btn:hover { background-color: #1d4ed8; transform: translateY(-1px); }
+        
+        button.reset-btn { background-color: #94a3b8; margin-top: 10px; font-size: 0.9rem; padding: 10px; box-shadow: none; }
+        button.reset-btn:hover { background-color: #64748b; }
+
+        /* RESULTADOS */
+        #resultado { display: none; margin-top: 20px; padding: 15px; border-radius: 8px; text-align: center; border: 2px solid transparent; animation: fadeIn 0.5s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .res-success { background-color: #f0fdf4; border-color: #22c55e !important; color: #15803d; }
+        .res-fail { background-color: #fef2f2; border-color: #ef4444 !important; color: #991b1b; }
+
+        /* DISCLAIMER */
+        .disclaimer { font-size: 0.7em; color: #94a3b8; margin-top: 30px; text-align: justify; line-height: 1.4; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+
+        /* RESPONSIVE */
+        @media (min-width: 900px) {
+            .main-layout { flex-direction: row; }
+            #map { height: 100vh; width: 65%; flex: none; }
+            .controls-container { width: 35%; height: 100vh; padding: 30px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="main-layout">
+    <div id="map"></div>
+    
+    <div class="controls-container">
+        
+        <h2>⚙️ Calculadora Rutas Moto EV</h2>
+
+        <div class="status-bar">
+            <div class="status-item">Distancia<br><span id="rutaDist">0 km</span></div>
+            <div class="status-item">Tiempo<br><span id="rutaTime">0 min</span></div>
+            <div class="status-item">V. Media<br><span id="rutaVel">0 km/h</span></div>
+        </div>
+
+        <h3>1. La Moto</h3>
+        
+        <div class="input-group">
+            <label>Clase Vehículo (Matrícula)</label>
+            <select id="claseVehiculo">
+                <option value="moto" selected>Motocicleta (>45km/h - Blanca)</option>
+                <option value="ciclomotor">Ciclomotor (Max 45km/h - Amarilla)</option>
+            </select>
+        </div>
+
+        <div class="grid-2">
+            <div class="input-group">
+                <label>Capacidad (Wh)</label>
+                <input type="number" id="capacidadWh" value="2880" placeholder="V * Ah">
+            </div>
+            <div class="input-group">
+                <label title="Potencia Nominal (Sostenida)">Potencia Nom. (W)</label>
+                <input type="number" id="potenciaW" value="3000" placeholder="Ej: 3000">
+            </div>
+        </div>
+        <div class="grid-2">
+            <div class="input-group">
+                <label>Peso Moto (kg)</label>
+                <input type="number" id="pesoMoto" value="100">
+            </div>
+            <div class="input-group">
+                <label>Tipo / Aerodinámica</label>
+                <select id="tipoMoto">
+                    <option value="scooter">Scooter (Urbano)</option>
+                    <option value="naked" selected>Naked (Estándar)</option>
+                    <option value="cross">Cross/Enduro (Mala aero)</option>
+                </select>
+            </div>
+        </div>
+        <div class="input-group">
+            <label title="Recuperación de energía al frenar">Freno Regenerativo</label>
+            <select id="regeneracion">
+                <option value="0">Desactivado / Rueda Libre</option>
+                <option value="1" selected>Normal</option>
+                <option value="2">Alto (One-Pedal driving)</option>
+            </select>
+        </div>
+
+        <h3>2. Carga y Estilo</h3>
+        <div class="grid-2">
+            <div class="input-group">
+                <label>Peso Piloto+Carga (kg)</label>
+                <input type="number" id="pesoPiloto" value="85">
+            </div>
+            <div class="input-group">
+                <label>Estilo Conducción</label>
+                <select id="estilo">
+                    <option value="eco">Chill / Eco</option>
+                    <option value="normal" selected>Normal</option>
+                    <option value="sport">Agresivo / Puño a fondo</option>
+                </select>
+            </div>
+        </div>
+
+        <h3>3. Entorno y Vía</h3>
+        <div class="grid-2">
+            <div class="input-group">
+                <label>Tráfico (Afecta veloc.)</label>
+                <select id="trafico">
+                    <option value="low" selected>Fluido (Rápido)</option>
+                    <option value="medium">Normal / Urbano</option>
+                    <option value="high">Denso / Atascos</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>Temperatura (°C)</label>
+                <input type="number" id="temp" value="20">
+            </div>
+        </div>
+        <div class="grid-2">
+            <div class="input-group">
+                <label>Viento (Frontal)</label>
+                <select id="viento">
+                    <option value="0" selected>Sin viento</option>
+                    <option value="5">Brisa ligera (15 km/h)</option>
+                    <option value="10">Viento Fuerte (30 km/h)</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>Terreno (Promedio)</label>
+                <select id="terreno">
+                    <option value="flat" selected>Llano</option>
+                    <option value="hilly">Con cuestas (Mixto)</option>
+                    <option value="mountain">Montaña (Subidas duras)</option>
+                </select>
+            </div>
+        </div>
+
+        <button class="action-btn" onclick="calcularViabilidad()">COMPROBAR AUTONOMÍA</button>
+        <button class="action-btn reset-btn" onclick="borrarRuta()">Borrar Ruta Completa</button>
+
+        <div id="resultado">
+            <h3 id="resTitulo" style="margin:0 0 10px 0;"></h3>
+            <div id="resMensaje"></div>
+        </div>
+        
+        <p class="disclaimer">
+            <strong>Instrucciones:</strong> Usa la Lupa 🔍 para buscar calles. Haz clic en el mapa para marcar puntos. Si pulsas sobre un punto existente, podrás borrarlo del mapa.
+        </p>
+    </div>
+</div>
+
+<script>
+    // --- VARIABLES GLOBALES ---
+    let rutaDistanciaKm = 0;
+    let velocidadMediaCalculada = 0;
+    let tiempoHoras = 0;
+
+    // 1. INICIALIZAR MAPA
+    var map = L.map('map').setView([39.6136, 2.8822], 9); 
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    // 2. CONFIGURACIÓN DEL BUSCADOR (LUPA)
+    var geocoder = L.Control.Geocoder.nominatim();
+    
+    L.Control.geocoder({
+        geocoder: geocoder,
+        defaultMarkGeocode: false, 
+        placeholder: "Buscar calle o ciudad..."
+    })
+    .on('markgeocode', function(e) {
+        var bbox = e.geocode.bbox;
+        var poly = L.polygon([
+            bbox.getSouthEast(),
+            bbox.getNorthEast(),
+            bbox.getNorthWest(),
+            bbox.getSouthWest()
+        ]);
+        map.fitBounds(poly.getBounds());
+        
+        // Popup simple
+        L.popup()
+            .setLatLng(e.geocode.center)
+            .setContent("<b>" + e.geocode.name + "</b><br>Haz clic aquí para marcar Inicio o Destino.")
+            .openOn(map);
+    })
+    .addTo(map);
+
+    // 3. CONFIGURACIÓN DE RUTA
+    var control = L.Routing.control({
+        waypoints: [],
+        routeWhileDragging: true,
+        language: 'es',
+        geocoder: geocoder, 
+        createMarker: function(i, wp, nWps) {
+            return L.marker(wp.latLng, { draggable: true });
+        }
+    }).addTo(map);
+
+    // Ocultar panel de instrucciones nativo
+    var style = document.createElement('style');
+    style.innerHTML = '.leaflet-routing-container { display: none !important; }';
+    document.getElementsByTagName('head')[0].appendChild(style);
+
+    // 4. ACTUALIZACIÓN DE DATOS DE RUTA
+    control.on('routesfound', function(e) {
+        var routes = e.routes;
+        var summary = routes[0].summary;
+
+        rutaDistanciaKm = summary.totalDistance / 1000;
+        tiempoHoras = summary.totalTime / 3600;
+
+        if (tiempoHoras > 0) {
+            velocidadMediaCalculada = rutaDistanciaKm / tiempoHoras;
+        }
+
+        document.getElementById('rutaDist').innerText = rutaDistanciaKm.toFixed(1) + " km";
+        document.getElementById('rutaTime').innerText = Math.round(summary.totalTime / 60) + " min";
+        document.getElementById('rutaVel').innerText = Math.round(velocidadMediaCalculada) + " km/h";
+    });
+
+    // 5. LÓGICA DE CLICS INTELIGENTE
+    map.on('click', function(e) {
+        var clickLatLng = e.latlng;
+        var waypoints = control.getWaypoints();
+        
+        // A. DETECTAR SI EL CLIC ES PARA EDITAR UN PUNTO EXISTENTE
+        var indexToDelete = -1;
+        var minDist = 200; // metros de tolerancia para detectar clic
+
+        // Revisar waypoints existentes
+        for (var i = 0; i < waypoints.length; i++) {
+            if (waypoints[i].latLng) {
+                var dist = map.distance(clickLatLng, waypoints[i].latLng);
+                if (dist < minDist) {
+                    minDist = dist;
+                    indexToDelete = i;
+                }
+            }
+        }
+
+        var container = L.DomUtil.create('div');
+
+        if (indexToDelete !== -1) {
+            // --- MODO BORRAR PUNTO EXISTENTE ---
+            var delBtn = createButton('🗑️ Borrar este punto', container, '#dc2626');
+            
+            L.popup().setContent(container).setLatLng(waypoints[indexToDelete].latLng).openOn(map);
+
+            L.DomEvent.on(delBtn, 'click', function() {
+                control.spliceWaypoints(indexToDelete, 1);
+                map.closePopup();
+            });
+
+        } else {
+            // --- MODO AÑADIR NUEVO PUNTO ---
+            var startBtn = createButton('🏁 Fijar Inicio', container, '#2563eb');
+            var stopBtn = createButton('📍 Añadir Parada', container, '#d97706');
+            var destBtn = createButton('🏁 Fijar Destino', container, '#10b981'); 
+
+            L.popup().setContent(container).setLatLng(clickLatLng).openOn(map);
+
+            L.DomEvent.on(startBtn, 'click', function() {
+                control.spliceWaypoints(0, 1, clickLatLng);
+                map.closePopup();
+            });
+
+            L.DomEvent.on(stopBtn, 'click', function() {
+                var wps = control.getWaypoints();
+                // Lógica inteligente para insertar en medio si ya hay destino
+                var insertIndex = Math.max(1, wps.length - 1);
+                control.spliceWaypoints(insertIndex, 0, clickLatLng);
+                map.closePopup();
+            });
+
+            L.DomEvent.on(destBtn, 'click', function() {
+                var wps = control.getWaypoints();
+                control.spliceWaypoints(wps.length - 1, 1, clickLatLng);
+                map.closePopup();
+            });
+        }
+    });
+
+    function createButton(label, container, bgColor) {
+        var btn = L.DomUtil.create('button', '', container);
+        btn.type = 'button';
+        btn.innerHTML = label;
+        btn.style.margin = '5px 0';
+        btn.style.padding = '8px 12px';
+        btn.style.cursor = 'pointer';
+        btn.style.background = bgColor;
+        btn.style.color = 'white';
+        btn.style.border = 'none';
+        btn.style.borderRadius = '4px';
+        btn.style.width = '100%';
+        btn.style.fontWeight = 'bold';
+        return btn;
+    }
+
+    function borrarRuta() {
+        control.setWaypoints([]);
+        rutaDistanciaKm = 0;
+        document.getElementById('resultado').style.display = 'none';
+        document.getElementById('rutaDist').innerText = "0 km";
+        document.getElementById('rutaTime').innerText = "0 min";
+        document.getElementById('rutaVel').innerText = "0 km/h";
+    }
+
+    // 6. CÁLCULO FÍSICO AVANZADO
+    function calcularViabilidad() {
+        if (rutaDistanciaKm === 0) {
+            alert("⚠️ Por favor, define una ruta en el mapa primero.");
+            return;
+        }
+
+        // --- RECOGIDA DE DATOS ---
+        let claseVehiculo = document.getElementById('claseVehiculo').value;
+        
+        let wh = parseFloat(document.getElementById('capacidadWh').value) || 0;
+        let potenciaNominal = parseFloat(document.getElementById('potenciaW').value) || 3000;
+        let pesoM = parseFloat(document.getElementById('pesoMoto').value) || 0;
+        let pesoP = parseFloat(document.getElementById('pesoPiloto').value) || 0;
+        
+        let tipo = document.getElementById('tipoMoto').value;
+        let estilo = document.getElementById('estilo').value;
+        let temp = parseFloat(document.getElementById('temp').value);
+        
+        let vientoFrontal = parseFloat(document.getElementById('viento').value); 
+        let trafico = document.getElementById('trafico').value; 
+        let terreno = document.getElementById('terreno').value;
+        let regeneracion = document.getElementById('regeneracion').value;
+
+        // --- CONSTANTES FÍSICAS ---
+        const g = 9.81;
+        const densidadAire = 1.225;
+        let masaTotal = pesoM + pesoP;
+        
+        // 1. VELOCIDAD Y CLASE DE VEHÍCULO
+        let velMedia = velocidadMediaCalculada;
+        
+        // LÍMITE CICLOMOTOR (45 km/h)
+        if (claseVehiculo === 'ciclomotor') {
+            if (velMedia > 45) velMedia = 45;
+        }
+
+        if (velMedia < 15) velMedia = 15; 
+        
+        // Factores de corrección por Tráfico
+        let factorTraficoEficiencia = 1.0;
+
+        if (trafico === 'medium') {
+            velMedia = velMedia * 0.85; 
+            factorTraficoEficiencia = 0.95; 
+        } else if (trafico === 'high') {
+            velMedia = velMedia * 0.60; 
+            factorTraficoEficiencia = 0.80; 
+        }
+
+        // Ajuste por estilo
+        if (estilo === 'sport') velMedia *= 1.2;
+
+        // Re-check de límite legal tras ajustes para ciclomotor
+        if (claseVehiculo === 'ciclomotor' && velMedia > 45) {
+            velMedia = 45; 
+        }
+
+        let velMs = velMedia / 3.6; 
+        let velVientoMs = vientoFrontal / 3.6; 
+
+        // 2. Coeficiente Aerodinámico (CdA)
+        let CdA = 0.45; 
+        if (tipo === 'scooter') CdA = 0.40;
+        if (tipo === 'cross') CdA = 0.60; 
+
+        // 3. Resistencia a la rodadura (Crr)
+        let Crr = 0.018; 
+
+        // 4. Factor Terreno
+        let slope = 0; 
+        if (terreno === 'hilly') slope = 0.015; 
+        if (terreno === 'mountain') slope = 0.04; 
+
+        // --- CÁLCULO DE POTENCIA ---
+        let pRodadura = masaTotal * g * Crr * velMs;
+        let pAero = 0.5 * densidadAire * CdA * Math.pow((velMs + velVientoMs), 3);
+        let pPendiente = masaTotal * g * slope * velMs;
+
+        let potenciaMecanica = pRodadura + pAero + pPendiente;
+
+        // --- EFICIENCIA ---
+        let eficiencia = 0.90; 
+        eficiencia *= factorTraficoEficiencia;
+
+        let cargaMotor = potenciaMecanica / potenciaNominal;
+        if (cargaMotor < 0.15) eficiencia -= 0.05; 
+
+        if (estilo === 'sport') eficiencia -= 0.10; 
+        if (estilo === 'eco') eficiencia += 0.02;
+
+        let factorTemp = 1.0;
+        if (temp < 15) factorTemp = 1 - ((15 - temp) * 0.015); 
+        if (temp > 35) factorTemp = 0.98; 
+
+        let factorRegen = 1.0;
+        if (terreno === 'hilly' || terreno === 'mountain') {
+            if (regeneracion === '1') factorRegen = 1.10; 
+            if (regeneracion === '2') factorRegen = 1.15; 
+        } else {
+             if (trafico === 'high' && regeneracion !== '0') factorRegen = 1.08;
+             else if (regeneracion === '2') factorRegen = 1.05;
+        }
+
+        // --- RESULTADO ---
+        let potenciaElectrica = potenciaMecanica / eficiencia;
+        let consumoWhKm = (potenciaElectrica / velMedia); 
+
+        if (consumoWhKm < 15) consumoWhKm = 15; 
+
+        let energiaDisponible = wh * factorTemp * 0.95 * factorRegen; 
+
+        let autonomiaEstimada = energiaDisponible / consumoWhKm;
+        let kmRestantes = autonomiaEstimada - rutaDistanciaKm;
+
+        // Aviso potencia / Vía rápida
+        let advertenciaPotencia = "";
+        
+        if (claseVehiculo === 'ciclomotor') {
+            if (velocidadMediaCalculada > 60) {
+                 advertenciaPotencia = "<br><small style='color:#d97706'>⚠️ Aviso: La ruta original es muy rápida (autopista). El cálculo asume que vas por vías lentas (máx 45km/h).</small>";
+            }
+        } else {
+            if (potenciaMecanica > (potenciaNominal * 1.5)) {
+                advertenciaPotencia = "<br><small style='color:#dc2626'>⚠️ Aviso: La ruta exige mucha potencia para este motor.</small>";
+            }
+        }
+
+        let resBox = document.getElementById('resultado');
+        let resTitulo = document.getElementById('resTitulo');
+        let resMensaje = document.getElementById('resMensaje');
+        
+        resBox.style.display = 'block';
+
+        if (kmRestantes >= 0) {
+            let porcentajeRestante = Math.round((kmRestantes / autonomiaEstimada) * 100);
+            resBox.className = 'res-success';
+            resTitulo.innerHTML = "✅ LLEGAS AL DESTINO";
+            resMensaje.innerHTML = `
+                Consumo est: <strong>${Math.round(consumoWhKm)} Wh/km</strong><br>
+                Batería sobrante: <strong>${porcentajeRestante}%</strong> (aprox. ${Math.round(kmRestantes)} km extra).
+                ${advertenciaPotencia}
+            `;
+        } else {
+            resBox.className = 'res-fail';
+            resTitulo.innerHTML = "❌ NO LLEGAS";
+            resMensaje.innerHTML = `
+                Te faltan <strong>${Math.abs(Math.round(kmRestantes))} km</strong>.<br>
+                Consumo est: <strong>${Math.round(consumoWhKm)} Wh/km</strong>.<br>
+                Intenta bajar la velocidad o evitar tráfico denso.
+                ${advertenciaPotencia}
+            `;
+        }
+    }
+</script>
+
+</body>
+</html>
